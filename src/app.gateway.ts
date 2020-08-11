@@ -21,12 +21,15 @@ class Game {
   public started = false
   public creatorId: string
   public roomName: string
+  public emitter: (emit: string, data: any) => any
   private cards: number[]
   public players: { [key: string]: any } = {}
 
-  constructor(creatorId: string, roomName: string) {
+  constructor(creatorId: string, roomName: string, emitter: (emit: string, data: any) => any) {
     this.creatorId = creatorId
     this.roomName = roomName
+    this.emitter = emitter
+    this.emitter('gameJoined', creatorId)
     this.cards = [...Array(22).keys()]
   }
 }
@@ -35,7 +38,7 @@ class Game {
 export class AppGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   private players: { [key: string]: Player } = {}
 
-  private games: { [key: string]: Game } = { a: new Game('aze', 'eza') }
+  private games: { [key: string]: Game } = {}
 
   @WebSocketServer() server: Server
   private logger: Logger = new Logger('AppGateway')
@@ -65,8 +68,7 @@ export class AppGateway implements OnGatewayInit, OnGatewayConnection, OnGateway
   @SubscribeMessage('createRoom')
   createRoom(@MessageBody() data: string, @ConnectedSocket() client: Socket): void {
     this.logger.log('createRoom')
-    this.games[client.id] = new Game(client.id, data)
-    this.server.to(client.id).emit('gameJoined', this.games[client.id])
+    this.games[client.id] = new Game(client.id, data, (emit: string, data: any) => this.server.to(client.id).emit(emit, data))
     this.games[client.id].players[client.id] = {}
     this.server.to(client.id).emit('playerUpdate', this.games[client.id].players)
     this.logger.log(this.server.sockets.adapter.rooms)
@@ -82,10 +84,9 @@ export class AppGateway implements OnGatewayInit, OnGatewayConnection, OnGateway
         this.logger.error(err)
         client.emit('joinFailed')
       } else {
-        this.server.to(client.id).emit('gameJoined', this.games[client.id])
+        this.server.to(client.id).emit('gameJoined', this.games[data])
         this.games[data].players[client.id] = {}
-        this.server.to(client.id).emit('playerUpdate', this.games[client.id].players)
-        this.logger.log(this.server.sockets.adapter.rooms)
+        this.server.to(client.id).emit('playerUpdate', this.games[data].players)
       }
     })
   }
